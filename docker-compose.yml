@@ -1,0 +1,12 @@
+version: '3'
+
+services:
+  app:
+    build: .
+    restart: always
+    environment:
+      PREDEFINED_HASH: REPLACE_ME!!!
+    ports:
+      - "127.0.0.1:11211:8000"
+    volumes:
+      - $PWD/secrets.yml:/app/secrets.yml

@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>OTP</title>
+    <link rel="icon" href="https://storozhenko.dev/favicon.ico">	
+    <script src="https://unpkg.com/htmx.org"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/otpauth/9.2.2/otpauth.umd.min.js"></script>
+</head>
+<body>
+<div id="main">
+    <form hx-post="/check-password" hx-target="#main" hx-swap="outerHTML">
+        <input type="password" name="password" placeholder="password goes here" required>
+        <button class="button" type="submit">➡️</button>
+        <div id="error"></div>
+    </form>
+</div>
+</body>
+<style>
+    @import url(https://necolas.github.io/normalize.css/latest/normalize.css);
+    @import url(https://cdn.jsdelivr.net/npm/firacode@6.2.0/distr/fira_code.css);
+
+    body {
+        font-family: "Fira Code", monospace;
+        background-color: #2e2e2e;
+        color: #d6d6d6;
+        display: flex;
+        justify-content: space-around;
+    }
+
+    @supports (font-variation-settings: normal) {
+        body {
+            font-family: "Fira Code VF", monospace;
+        }
+    }
+
+    form {
+        display: flex;
+        height: 100vh; /* 100% of the viewport height */
+        width: 100vh; /* 100% of the viewport height */
+        justify-content: center;
+        align-items: center;
+        flex-direction: column;
+        padding: 20px; /* Adjust based on your preference */
+    }
+
+    input {
+        background: transparent;
+        border: none;
+        border-bottom: solid 1px #d6d6d6;
+        outline: none;
+        margin-bottom: 20px;
+        margin-top: 20px;
+        color: #d6d6d6;
+        text-align: center;
+        width: 90%; /* Adjust the width as needed */
+        font-size: 24px; /* Adjust font size as needed */
+    }
+
+
+    .button {
+        background: transparent;
+        border: none;
+        outline: none;
+        font-size: 25px;
+    }
+
+    @keyframes spin {
+        0% {
+            transform: rotate(0deg);
+        }
+        100% {
+            transform: rotate(360deg);
+        }
+    }
+
+    .button:hover {
+        cursor: pointer;
+        animation: spin 0.5s linear infinite;
+    }
+
+
+</style>
+</html>
