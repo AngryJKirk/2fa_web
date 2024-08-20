@@ -3,7 +3,7 @@
 ![](https://storozhenko.dev/no_auth/example.gif)
 ## Purpose
 
-Since Authy discontinued their desktop application I was struggling finding a replacement.
+Since Authy discontinued their desktop application I was struggling to find a replacement.
 
 Everything I tried is bulky and overcomplicated.
 
