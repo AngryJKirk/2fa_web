@@ -65,8 +65,7 @@ This solution supports only SHA1 6 digit OTPs.
 
 PRs to support more are welcome, I am too lazy. Especially because all 30 of my OTPs are using SHA1 6 digit scheme.
 
-Due to my poor coding, secret names must be a valid JS variables, meaning it can contain only English letters,
-underscores and numbers.
+Due to my poor coding, secret names can not contain special symbols, only English letters, numbers, spaces and dots
 
 
 ### Importing your keys

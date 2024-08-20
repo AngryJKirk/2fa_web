@@ -106,7 +106,7 @@ def add_secret():
         return
 
     secret = input("Enter the OTP secret: ")
-    secret_name = input("Enter the secret name (no spaces allowed): ")
+    secret_name = input("Enter the secret name: ")
     secret = encrypt_message(secret, password).decode()
 
     with open(secrets_path, 'r') as file:
