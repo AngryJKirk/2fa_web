@@ -5,6 +5,7 @@ from multiprocessing import Pool
 from functools import partial
 import yaml
 from flask import Flask, render_template, request, make_response
+from flask_limiter import Limiter
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.backends import default_backend
@@ -45,8 +46,21 @@ def decrypt_message(encrypted_message_with_salt: bytes, password: str):
     return decrypted_message
 
 
-app = Flask(__name__)
+def get_client_ip():
+    return request.headers.get('X-Forwarded-For', request.remote_addr)
 
+
+def rate_limit_exceeded_handler(_):
+    client_ip = get_client_ip()
+    print(f"Rate limit exceeded for IP: {client_ip}")
+
+
+app = Flask(__name__)
+limiter = Limiter(
+    key_func=get_client_ip,
+    app=app,
+    default_limits=["5 per minute"]
+)
 predefined_hash = os.environ.get("PREDEFINED_HASH")
 secrets_path = 'secrets.yml'
 
@@ -66,6 +80,7 @@ def process_secret(password, secret_desc):
 
 
 @app.route('/check-password', methods=['POST'])
+@limiter.limit("5 per minute", on_breach=rate_limit_exceeded_handler)
 def check_password():
     start_time = time.time()
     password = request.form.get('password')
