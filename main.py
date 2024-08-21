@@ -1,21 +1,46 @@
 import argparse
 import hashlib
-import time
-from multiprocessing import Pool
-from functools import partial
-import yaml
-from flask import Flask, render_template, request, make_response
-from flask_limiter import Limiter
-from werkzeug.middleware.proxy_fix import ProxyFix
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.backends import default_backend
-from base64 import urlsafe_b64encode, urlsafe_b64decode
-from cryptography.fernet import Fernet
 import os
+import time
+from base64 import urlsafe_b64encode, urlsafe_b64decode
+from contextlib import asynccontextmanager
+from functools import partial
+from multiprocessing import Pool
 
-from waitress import serve
+import yaml
+from cryptography.fernet import Fernet
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+from fastapi import FastAPI, Form, Depends
+from fastapi.responses import HTMLResponse
+from fastapi_limiter import FastAPILimiter
+from fastapi_limiter.depends import RateLimiter
+from jinja2 import Environment, FileSystemLoader
+from redis import asyncio as aioredis
+import uvicorn
 
+import logging
+
+logging.basicConfig(level=logging.INFO)
+
+logger = logging.getLogger(__name__)
+app = FastAPI()
+
+env = Environment(loader=FileSystemLoader("templates"))
+
+predefined_hash = os.environ.get("PREDEFINED_HASH")
+secrets_path = 'secrets.yml'
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    redis = await aioredis.from_url("redis://redis", encoding="utf-8", decode_responses=True)
+    await FastAPILimiter.init(redis)
+    yield
+    await redis.close()
+
+app.router.lifespan_context = lifespan
 
 def derive_key(password: str, salt: bytes):
     kdf = PBKDF2HMAC(
@@ -47,33 +72,6 @@ def decrypt_message(encrypted_message_with_salt: bytes, password: str):
     return decrypted_message
 
 
-def get_client_ip():
-    return request.headers.get('X-Forwarded-For', request.remote_addr)
-
-
-def rate_limit_exceeded_handler(_):
-    client_ip = get_client_ip()
-    print(f"Rate limit exceeded for IP: {client_ip}")
-
-
-app = Flask(__name__)
-app.wsgi_app = ProxyFix(
-    app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1
-)
-limiter = Limiter(
-    key_func=get_client_ip,
-    app=app,
-    default_limits=["5 per minute"]
-)
-predefined_hash = os.environ.get("PREDEFINED_HASH")
-secrets_path = 'secrets.yml'
-
-
-@app.route('/', methods=['GET'])
-def index():
-    return render_template('index.html')
-
-
 def process_secret(password, secret_desc):
     secret_value = decrypt_message(secret_desc['secret'], password)
     name = secret_desc['name']
@@ -83,40 +81,46 @@ def process_secret(password, secret_desc):
     }
 
 
-@app.route('/check-password', methods=['POST'])
-@limiter.limit("5 per minute", on_breach=rate_limit_exceeded_handler)
-def check_password():
+@app.get("/", response_class=HTMLResponse)
+async def index():
+    template = env.get_template("index.html")
+    content = template.render()
+    return HTMLResponse(content=content)
+
+
+@app.post("/check-password", dependencies=[Depends(RateLimiter(times=5, seconds=60))])
+async def check_password(password: str = Form(...)):
     start_time = time.time()
-    password = request.form.get('password')
-    if not password:
-        return 400
 
     hashed_password = hashlib.sha256(password.encode()).hexdigest()
     if predefined_hash != hashed_password:
-        content = render_template('bad_password.html')
-        response = make_response(content)
-        response.headers.add('HX-Retarget', '#error')
-        print("wrong password")
-        return response
+        template = env.get_template("bad_password.html")
+        content = template.render()
+        return HTMLResponse(content=content, headers={"HX-Retarget": "#error"})
 
     func = partial(process_secret, password)
     with open(secrets_path, "r") as file:
         secrets = yaml.safe_load(file)
+
     with Pool() as pool:
         secrets_list = pool.map(func, secrets)
-    print("Sending back, time elapsed (seconds): ", time.time() - start_time)
-    return render_template('otp.html.j2', secrets=secrets_list)
+
+    template = env.get_template("otp.html.j2")
+    content = template.render(secrets=secrets_list)
+    logger.info("Sending back, time elapsed (seconds):", time.time() - start_time)
+
+    return HTMLResponse(content=content)
 
 
-def run_server(host, port):
-    print(f"Running server on {host}:{port}")
-    serve(app, host=host, port=port)
+def run_server(host: str, port: int):
+    uvicorn.run(app, host=host, port=port, proxy_headers=True)
 
 
 def add_secret():
     if not predefined_hash:
         print("You need to have PREDEFINED_HASH env variable set. Now it's None")
         return
+
     password = input("Enter your password: ")
     hashed_password = hashlib.sha256(password.rstrip().encode()).hexdigest()
 

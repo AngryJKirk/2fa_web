@@ -10,3 +10,5 @@ services:
       - "127.0.0.1:11211:8000"
     volumes:
       - $PWD/secrets.yml:/app/secrets.yml
+  redis:
+    image: redis:7.4.0
