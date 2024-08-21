@@ -6,6 +6,7 @@ from functools import partial
 import yaml
 from flask import Flask, render_template, request, make_response
 from flask_limiter import Limiter
+from werkzeug.middleware.proxy_fix import ProxyFix
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.backends import default_backend
@@ -56,6 +57,9 @@ def rate_limit_exceeded_handler(_):
 
 
 app = Flask(__name__)
+app.wsgi_app = ProxyFix(
+    app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1
+)
 limiter = Limiter(
     key_func=get_client_ip,
     app=app,

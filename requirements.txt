@@ -3,3 +3,4 @@ Flask==3.0.2
 PyYAML==6.0.1
 waitress==3.0.0
 Flask-Limiter~=3.8.0
+werkzeug~=3.0.1
