@@ -92,7 +92,7 @@ async def index():
 
 @app.post("/check-password", dependencies=[Depends(RateLimiter(times=5, seconds=60))])
 async def check_password(password: str = Form(...)):
-    start_time = time.time()
+    start_time = time.monotonic()
 
     if not bcrypt.checkpw(password.encode('utf-8'), predefined_bcrypt_hash.encode('utf-8')):
         template = env.get_template("bad_password.html")
@@ -108,7 +108,7 @@ async def check_password(password: str = Form(...)):
 
     template = env.get_template("otp.html.j2")
     content = template.render(secrets=secrets_list)
-    logger.info(f"Sending back, time elapsed (seconds): {time.time() - start_time}")
+    logger.info(f"Time to decrypt {len(secrets_list)} secrets: {time.monotonic() - start_time:.2f}s")
 
     return HTMLResponse(content=content)
 
