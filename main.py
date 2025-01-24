@@ -24,12 +24,13 @@ import uvicorn
 import logging
 
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("OTP_APP")
 
-app = FastAPI()
+app: FastAPI = FastAPI()
 env = Environment(loader=FileSystemLoader("templates"))
-
-predefined_bcrypt_hash = os.environ.get("PREDEFINED_HASH")
+bad_password_template = env.get_template("bad_password.html")
+otp_template = env.get_template("otp.html.j2")
+predefined_bcrypt_hash = os.environ.get("PREDEFINED_HASH").encode("utf-8")
 secrets_path = 'secrets.yml'
 
 
@@ -44,7 +45,7 @@ async def lifespan(app: FastAPI):
 app.router.lifespan_context = lifespan
 
 
-def derive_key(password: str, salt: bytes):
+def derive_key(password: str, salt: bytes) -> bytes:
     kdf = PBKDF2HMAC(
         algorithm=hashes.SHA256(),
         length=32,
@@ -52,11 +53,10 @@ def derive_key(password: str, salt: bytes):
         iterations=100000,
         backend=default_backend()
     )
-    key = urlsafe_b64encode(kdf.derive(password.encode()))
-    return key
+    return urlsafe_b64encode(kdf.derive(password.encode()))
 
 
-def encrypt_message(message: str, password: str):
+def encrypt_message(message: str, password: str) -> bytes:
     salt = os.urandom(16)
     key = derive_key(password, salt)
     f = Fernet(key)
@@ -64,22 +64,19 @@ def encrypt_message(message: str, password: str):
     return urlsafe_b64encode(salt + encrypted_message)
 
 
-def decrypt_message(encrypted_message_with_salt: bytes, password: str):
+def decrypt_message(encrypted_message_with_salt: bytes, password: str) -> str:
     encrypted_message_with_salt = urlsafe_b64decode(encrypted_message_with_salt)
     salt = encrypted_message_with_salt[:16]
     encrypted_message = encrypted_message_with_salt[16:]
     key = derive_key(password, salt)
     f = Fernet(key)
-    decrypted_message = f.decrypt(encrypted_message).decode()
-    return decrypted_message
+    return f.decrypt(encrypted_message).decode()
 
 
-def process_secret(password, secret_desc):
-    secret_value = decrypt_message(secret_desc['secret'], password)
-    name = secret_desc['name']
+def process_secret(password: str, secret_desc) -> dict[str, str]:
     return {
-        'secret': secret_value,
-        'name': name,
+        'secret': decrypt_message(secret_desc['secret'], password),
+        'name': secret_desc['name'],
     }
 
 
@@ -94,10 +91,8 @@ async def index():
 async def check_password(password: str = Form(...)):
     start_time = time.monotonic()
 
-    if not bcrypt.checkpw(password.encode('utf-8'), predefined_bcrypt_hash.encode('utf-8')):
-        template = env.get_template("bad_password.html")
-        content = template.render()
-        return HTMLResponse(content=content, headers={"HX-Retarget": "#error"})
+    if not verify_password_hash(password):
+        return HTMLResponse(content=bad_password_template.render(), headers={"HX-Retarget": "#error"})
 
     func = partial(process_secret, password)
     with open(secrets_path, "r") as file:
@@ -106,11 +101,16 @@ async def check_password(password: str = Form(...)):
     with Pool() as pool:
         secrets_list = pool.map(func, secrets)
 
-    template = env.get_template("otp.html.j2")
-    content = template.render(secrets=secrets_list)
     logger.info(f"Time to decrypt {len(secrets_list)} secrets: {time.monotonic() - start_time:.2f}s")
 
-    return HTMLResponse(content=content)
+    return HTMLResponse(content=otp_template.render(secrets=secrets_list))
+
+
+def verify_password_hash(password: str) -> bool:
+    start_time = time.monotonic()
+    result = bcrypt.checkpw(password.encode('utf-8'), predefined_bcrypt_hash)
+    logger.info(f"Time verify password: {time.monotonic() - start_time:.4f}s")
+    return result
 
 
 def run_server(host: str, port: int):
@@ -124,7 +124,7 @@ def add_secret():
 
     password = pwinput.pwinput(prompt='Enter your password: ', mask='*')
 
-    if not bcrypt.checkpw(password.encode('utf-8'), predefined_bcrypt_hash.encode('utf-8')):
+    if not verify_password_hash(password):
         print("Invalid password")
         return
 
