@@ -42,7 +42,7 @@ but I guess it's not, so your extensions might get your data.
 ## Usage
 
 1) clone the project
-2) Hash your password using SHA256 (`echo -n YOUR_SECRET_PASSWORD | sha256sum`)
+2) Hash your password using Bcrypt algorithm
 3) Put it in the `PREDEFINED_HASH` variable in ./docker-compose.yml
 4) run `docker compose up -d`
 5) run `docker compose exec app python3 main.py --add-secret` to add a secret. Make sure that you use base32 secret, but

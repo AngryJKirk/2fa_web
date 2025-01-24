@@ -1,5 +1,6 @@
 import argparse
-import hashlib
+import bcrypt
+import pwinput
 import os
 import time
 from base64 import urlsafe_b64encode, urlsafe_b64decode
@@ -23,13 +24,12 @@ import uvicorn
 import logging
 
 logging.basicConfig(level=logging.INFO)
-
 logger = logging.getLogger(__name__)
-app = FastAPI()
 
+app = FastAPI()
 env = Environment(loader=FileSystemLoader("templates"))
 
-predefined_hash = os.environ.get("PREDEFINED_HASH")
+predefined_bcrypt_hash = os.environ.get("PREDEFINED_HASH")
 secrets_path = 'secrets.yml'
 
 
@@ -40,7 +40,9 @@ async def lifespan(app: FastAPI):
     yield
     await redis.close()
 
+
 app.router.lifespan_context = lifespan
+
 
 def derive_key(password: str, salt: bytes):
     kdf = PBKDF2HMAC(
@@ -92,8 +94,7 @@ async def index():
 async def check_password(password: str = Form(...)):
     start_time = time.time()
 
-    hashed_password = hashlib.sha256(password.encode()).hexdigest()
-    if predefined_hash != hashed_password:
+    if not bcrypt.checkpw(password.encode('utf-8'), predefined_bcrypt_hash.encode('utf-8')):
         template = env.get_template("bad_password.html")
         content = template.render()
         return HTMLResponse(content=content, headers={"HX-Retarget": "#error"})
@@ -107,7 +108,7 @@ async def check_password(password: str = Form(...)):
 
     template = env.get_template("otp.html.j2")
     content = template.render(secrets=secrets_list)
-    logger.info("Sending back, time elapsed (seconds):", time.time() - start_time)
+    logger.info(f"Sending back, time elapsed (seconds): {time.time() - start_time}")
 
     return HTMLResponse(content=content)
 
@@ -117,18 +118,17 @@ def run_server(host: str, port: int):
 
 
 def add_secret():
-    if not predefined_hash:
-        print("You need to have PREDEFINED_HASH env variable set. Now it's None")
+    if not predefined_bcrypt_hash:
+        print("PREDEFINED_HASH environment variable must be set with a bcrypt hash")
         return
 
-    password = input("Enter your password: ")
-    hashed_password = hashlib.sha256(password.rstrip().encode()).hexdigest()
+    password = pwinput.pwinput(prompt='Enter your password: ', mask='*')
 
-    if predefined_hash != hashed_password:
-        print("Your password does not match, please use your password defined in PREDEFINED_HASH env variable.")
+    if not bcrypt.checkpw(password.encode('utf-8'), predefined_bcrypt_hash.encode('utf-8')):
+        print("Invalid password")
         return
 
-    secret = input("Enter the OTP secret: ")
+    secret = pwinput.pwinput(prompt='Enter the OTP secret: ', mask='*')
     secret_name = input("Enter the secret name: ")
     secret = encrypt_message(secret, password).decode()
 
@@ -170,10 +170,8 @@ def remove_secret():
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Run web server or CLI command.")
-
     parser.add_argument('--add-secret', action='store_true', help=f'Adds secret to {secrets_path}')
     parser.add_argument('--remove-secret', action='store_true', help=f'Removes secret from {secrets_path}')
-
     parser.add_argument('--serve', action='store_true', help="Start the server")
     parser.add_argument('--host', type=str, default="0.0.0.0", help="Host for the server")
     parser.add_argument('--port', type=int, default=8000, help="Port for the server")
