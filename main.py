@@ -1,4 +1,7 @@
 import argparse
+import asyncio
+import secrets
+
 import bcrypt
 import pwinput
 import os
@@ -8,12 +11,13 @@ from contextlib import asynccontextmanager
 from functools import partial
 from multiprocessing import Pool
 
+import pyotp
 import yaml
 from cryptography.fernet import Fernet
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-from fastapi import FastAPI, Form, Depends
+from fastapi import FastAPI, Form, Depends, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 from fastapi_limiter import FastAPILimiter
 from fastapi_limiter.depends import RateLimiter
@@ -28,10 +32,12 @@ logger = logging.getLogger("OTP_APP")
 
 app: FastAPI = FastAPI()
 env = Environment(loader=FileSystemLoader("templates"))
+index_template = env.get_template("index.html")
 bad_password_template = env.get_template("bad_password.html")
 otp_template = env.get_template("otp.html.j2")
 predefined_bcrypt_hash = os.environ.get("PREDEFINED_HASH").encode("utf-8")
 secrets_path = 'secrets.yml'
+temp_session_store = {}
 
 
 @asynccontextmanager
@@ -82,9 +88,7 @@ def process_secret(password: str, secret_desc) -> dict[str, str]:
 
 @app.get("/", response_class=HTMLResponse)
 async def index():
-    template = env.get_template("index.html")
-    content = template.render()
-    return HTMLResponse(content=content)
+    return HTMLResponse(content=index_template.render())
 
 
 @app.post("/check-password", dependencies=[Depends(RateLimiter(times=5, seconds=60))])
@@ -92,18 +96,61 @@ async def check_password(password: str = Form(...)):
     start_time = time.monotonic()
 
     if not verify_password_hash(password):
-        return HTMLResponse(content=bad_password_template.render(), headers={"HX-Retarget": "#error"})
+        return HTMLResponse(content=env.get_template("bad_password.html").render(), status_code=403)
+
+    with open(secrets_path, "r") as file:
+        encrypted_secrets = yaml.safe_load(file) or []
 
     func = partial(process_secret, password)
-    with open(secrets_path, "r") as file:
-        secrets = yaml.safe_load(file)
 
     with Pool() as pool:
-        secrets_list = pool.map(func, secrets)
+        decrypted_secrets = pool.map(func, encrypted_secrets)
 
-    logger.info(f"Time to decrypt {len(secrets_list)} secrets: {time.monotonic() - start_time:.2f}s")
+    token = secrets.token_urlsafe(32)
+    temp_session_store[token] = {
+        "secrets": decrypted_secrets,
+        "expires": time.monotonic() + 10
+    }
 
-    return HTMLResponse(content=otp_template.render(secrets=secrets_list))
+    logger.info(f"Time to decrypt {len(decrypted_secrets)} secrets: {time.monotonic() - start_time:.2f}s")
+
+    return HTMLResponse(content=otp_template.render(token=token))
+
+
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket, token: str):
+    if token not in temp_session_store:
+        await websocket.close(code=4401)
+        return
+
+    session = temp_session_store.pop(token)
+    if time.monotonic() > session['expires']:
+        await websocket.close(code=4401)
+        return
+
+    decrypted_secrets = session['secrets']
+
+    try:
+        await websocket.accept()
+        timeout = 5 * 60
+        start_time = time.monotonic()
+        last_codes = None
+        while time.monotonic() - start_time < timeout:
+            otps = [{"name": entry['name'], "code": pyotp.TOTP(entry['secret']).now()} for entry in decrypted_secrets]
+
+            if otps != last_codes:
+                await websocket.send_json(otps)
+                last_codes = otps
+
+            await asyncio.sleep(0.1)
+        logger.info(f'Closing connection due to timeout of {timeout} seconds')
+        await websocket.close(code=4400)
+    except WebSocketDisconnect:
+        pass
+    finally:
+        for entry in decrypted_secrets:
+            entry['secret'] = None
+        decrypted_secrets.clear()
 
 
 def verify_password_hash(password: str) -> bool:

@@ -1,14 +1,24 @@
-version: '3'
+version: '3.9'
 
 services:
+  redis:
+    image: redis:7.4.0
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 5
+      start_period: 5s
+      timeout: 2s
+
   app:
     build: .
     restart: always
     environment:
-      PREDEFINED_HASH: REPLACE_ME!!!
+      PREDEFINED_HASH: ${PREDEFINED_HASH}
     ports:
-      - "127.0.0.1:11211:8000"
+      - "${HOST_IP:-127.0.0.1}:11211:8000"
     volumes:
-      - $PWD/secrets.yml:/app/secrets.yml
-  redis:
-    image: redis:7.4.0
+      - ./secrets.yml:/app/secrets.yml
+    depends_on:
+      redis:
+        condition: service_healthy

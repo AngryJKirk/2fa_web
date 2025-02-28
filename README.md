@@ -31,22 +31,25 @@ So you *must* consider this project as insecure.
 OTP secrets are stored encrypted in yaml file.
 They are encrypted by [Fernet](https://cryptography.io/en/latest/fernet/)
 
-Whenever you input the right password on the fronted, OTP keys are decrypted using your password as a key and sent to
-you via HTTP.
+Whenever you input the right password on the frontend, OTP keys are decrypted and stored on the server side. 
+You are getting a new page with a short living token that is used to establish WebSocket connection.
+The server sends you the OTP values (secrets are never exposed) every time they are updated.
 
-When you close or update your page, decrypted data disappears.
+When the WebSocket connection is shut down (like you closed the tab, refreshed the page or you hit the 5 minute treshold) the decrypted secrets are erased from the memory of the server.
 
-The unencrypted keys are part of the Javascript built in the `<script></script>` tag. I don't know how secure that is,
-but I guess it's not, so your extensions might get your data.
+The short living token used to establish a WebSocket connection lives just 10 seconds and allows to create only a single connection. 
+
+The security is achived by not exposing any secrets to the client and server has it unencrypted only during the session.
 
 ## Usage
 
 1) clone the project
 2) Hash your password using Bcrypt algorithm
-3) Put it in the `PREDEFINED_HASH` variable in ./docker-compose.yml
+3) Create `.env` file like `.env_example`
+3) Put the hash in the `PREDEFINED_HASH` variable in the `.env` file 
 4) run `docker compose up -d`
 5) run `docker compose exec app python3 main.py --add-secret` to add a secret. Make sure that you use base32 secret, but
-   it is pretty much standard, so I believe in you! Also, your password *must* match the one you used for
+   it is pretty much standard, so I believe in you! Also, your password **must** match the one you used for
    `PREDEFINED_HASH`
 6) Open `http://localhost:11211` and enter your password. You will see your OTP codes.
 
@@ -54,18 +57,16 @@ but I guess it's not, so your extensions might get your data.
 
 Run `docker compose exec app python3 main.py --remove-secret` to remove a secret.
 
-`docker-compose.yml` is set up to listen only localhost. It's *HIGHLY* recommended to put it behind the reverse proxy.
+`docker-compose.yml` is set up to listen only localhost. It's **HIGHLY** recommended to put it behind the reverse proxy.
 I recommend [Caddy](https://caddyserver.com/) since it has HTTPS support out of the box.
 
-*NEVER USE THIS TOOL WITHOUT HTTPS*
+**NEVER USE THIS TOOL WITHOUT HTTPS**
 
 ### Limitations
 
 This solution supports only SHA1 6 digit OTPs.
 
 PRs to support more are welcome, I am too lazy. Especially because all 30 of my OTPs are using SHA1 6 digit scheme.
-
-Due to my poor coding, secret names can not contain special symbols, only English letters, numbers, spaces and dots
 
 
 ### Importing your keys
