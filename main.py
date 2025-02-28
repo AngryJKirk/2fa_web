@@ -1,6 +1,8 @@
 import argparse
 import asyncio
+import base64
 import secrets
+import sys
 
 import bcrypt
 import pwinput
@@ -27,6 +29,10 @@ import uvicorn
 
 import logging
 
+if not os.environ.get("PREDEFINED_HASH"):
+    sys.exit("PREDEFINED_HASH environment variable must be set with a bcrypt hash")
+
+predefined_bcrypt_hash = os.environ.get("PREDEFINED_HASH").encode("utf-8")
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("OTP_APP")
 
@@ -35,7 +41,6 @@ env = Environment(loader=FileSystemLoader("templates"))
 index_template = env.get_template("index.html")
 bad_password_template = env.get_template("bad_password.html")
 otp_template = env.get_template("otp.html.j2")
-predefined_bcrypt_hash = os.environ.get("PREDEFINED_HASH").encode("utf-8")
 secrets_path = 'secrets.yml'
 temp_session_store = {}
 
@@ -79,11 +84,21 @@ def decrypt_message(encrypted_message_with_salt: bytes, password: str) -> str:
     return f.decrypt(encrypted_message).decode()
 
 
-def process_secret(password: str, secret_desc) -> dict[str, str]:
+def process_secret(password: str, secret_desc) -> dict:
     return {
         'secret': decrypt_message(secret_desc['secret'], password),
         'name': secret_desc['name'],
+        'digits': secret_desc.get('digits', 6),
+        'algorithm': secret_desc.get('algorithm', 'SHA1'),
     }
+
+
+def generate_totp(entry) -> str:
+    return pyotp.TOTP(
+        entry['secret'],
+        digits=entry['digits'],
+        digest=entry['algorithm'].lower()
+    ).now()
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -136,7 +151,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
         start_time = time.monotonic()
         last_codes = None
         while time.monotonic() - start_time < timeout:
-            otps = [{"name": entry['name'], "code": pyotp.TOTP(entry['secret']).now()} for entry in decrypted_secrets]
+            otps = [{"name": entry['name'], "code": generate_totp(entry)} for entry in decrypted_secrets]
 
             if otps != last_codes:
                 await websocket.send_json(otps)
@@ -154,49 +169,88 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
 
 
 def verify_password_hash(password: str) -> bool:
-    start_time = time.monotonic()
-    result = bcrypt.checkpw(password.encode('utf-8'), predefined_bcrypt_hash)
-    logger.info(f"Time verify password: {time.monotonic() - start_time:.4f}s")
-    return result
+    return bcrypt.checkpw(password.encode('utf-8'), predefined_bcrypt_hash)
 
 
 def run_server(host: str, port: int):
     uvicorn.run(app, host=host, port=port, proxy_headers=True)
 
 
+def is_valid_base32(secret: str) -> bool:
+    try:
+        base64.b32decode(secret, casefold=True)
+        return True
+    except Exception:
+        return False
+
+def prompt_non_empty(prompt_text: str) -> str:
+    while True:
+        value = input(prompt_text).strip()
+        if value:
+            return value
+        print("This field cannot be empty. Try again.")
+
+def prompt_password(prompt_text: str) -> str:
+    while True:
+        password = pwinput.pwinput(prompt=prompt_text, mask='*').strip()
+        if password:
+            return password
+        print("Password cannot be empty. Try again.")
+
+def prompt_valid_base32(prompt_text: str) -> str:
+    while True:
+        secret = pwinput.pwinput(prompt=prompt_text, mask='*').strip()
+        if secret and is_valid_base32(secret):
+            return secret
+        print("Invalid secret. It must be a non-empty valid Base32 string. Try again.")
+
+def prompt_for_digits() -> int:
+    while True:
+        digits = input("Number of digits [default: 6]: ").strip() or "6"
+        if digits.isdigit() and 4 <= int(digits) <= 12:
+            return int(digits)
+        print("Invalid digits. Supported range: 4 to 12. Try again.")
+
+def prompt_for_algorithm() -> str:
+    valid_algorithms = {"SHA1", "SHA256", "SHA512"}
+    while True:
+        algorithm = input("Algorithm (SHA1/SHA256/SHA512) [default: SHA1]: ").strip().upper() or "SHA1"
+        if algorithm in valid_algorithms:
+            return algorithm
+        print(f"Invalid algorithm. Supported options: {', '.join(valid_algorithms)}. Try again.")
+
 def add_secret():
-    if not predefined_bcrypt_hash:
-        print("PREDEFINED_HASH environment variable must be set with a bcrypt hash")
-        return
 
-    password = pwinput.pwinput(prompt='Enter your password: ', mask='*')
+    while True:
+        password = prompt_password('Enter your password: ')
+        if verify_password_hash(password):
+            break
+        print("Invalid password. Try again.")
 
-    if not verify_password_hash(password):
-        print("Invalid password")
-        return
+    secret = prompt_valid_base32('Enter the OTP secret (base32): ')
+    secret_name = prompt_non_empty("Enter the secret name: ")
+    digits = prompt_for_digits()
+    algorithm = prompt_for_algorithm()
 
-    secret = pwinput.pwinput(prompt='Enter the OTP secret: ', mask='*')
-    secret_name = input("Enter the secret name: ")
-    secret = encrypt_message(secret, password).decode()
+    encrypted_secret = encrypt_message(secret, password).decode()
 
     with open(secrets_path, 'r') as file:
-        data = yaml.safe_load(file)
-    if data is None:
-        data = []
-    new_entry = {
-        'secret': secret,
-        'name': secret_name
-    }
-    data.append(new_entry)
+        data = yaml.safe_load(file) or []
+
+    data.append({
+        'secret': encrypted_secret,
+        'name': secret_name,
+        'digits': digits,
+        'algorithm': algorithm,
+    })
 
     with open(secrets_path, 'w') as file:
         yaml.dump(data, file, sort_keys=False)
 
     print("New secret added to secrets.yml")
 
-
 def remove_secret():
-    secret_name = input("Enter the secret name: ")
+    secret_name = prompt_non_empty("Enter the secret name: ")
 
     with open(secrets_path, 'r') as file:
         data = yaml.safe_load(file)
