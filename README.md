@@ -1,5 +1,7 @@
 # 2fa in web
 
+You can try [DEMO](https://storozhenko.dev/no_auth/2fa_demo/), the password is `123`.
+
 ![](https://storozhenko.dev/no_auth/example.gif)
 
 ## Purpose
