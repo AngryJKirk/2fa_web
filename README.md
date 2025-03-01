@@ -44,6 +44,8 @@ connection.
 
 The security is achived by not exposing any secrets to the client and server has it unencrypted only during the session.
 
+There is also a rate limiter on the password check.
+
 ## Usage
 
 1) clone the project
