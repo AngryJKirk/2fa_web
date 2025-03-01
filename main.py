@@ -24,7 +24,6 @@ from fastapi.responses import HTMLResponse
 from fastapi_limiter import FastAPILimiter
 from fastapi_limiter.depends import RateLimiter
 from jinja2 import Environment, FileSystemLoader
-from pkg_resources import normalize_path
 from redis import asyncio as aioredis
 import uvicorn
 
@@ -125,7 +124,7 @@ async def check_password(password: str = Form(...)):
     start_time = time.monotonic()
 
     if not verify_password_hash(password):
-        return HTMLResponse(content=env.get_template("bad_password.html").render(), status_code=403)
+        return HTMLResponse(content=env.get_template("bad_password.html").render(), headers={"HX-Retarget": "#error"})
 
     with open(secrets_path, "r") as file:
         encrypted_secrets = yaml.safe_load(file) or []
