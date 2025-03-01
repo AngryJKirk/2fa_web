@@ -9,7 +9,7 @@
 </head>
 <body>
 <div id="main">
-    <form hx-post="/check-password" hx-target="#main" hx-swap="outerHTML">
+    <form hx-post="{{ url_prefix }}check-password" hx-target="#main" hx-swap="outerHTML">
         <input type="password" name="password" placeholder="password goes here" required>
         <button class="button" type="submit">➡️</button>
         <div id="error"></div>

@@ -57,9 +57,10 @@
 </style>
 
 <script>
+    const url_prefix = "{{ url_prefix }}"
     const token = "{{ token }}";
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-    const socket = new WebSocket(`${proto}://${location.host}/ws?token=${encodeURIComponent(token)}`);
+    const socket = new WebSocket(`${proto}://${location.host}${url_prefix}ws?token=${encodeURIComponent(token)}`);
     const otpContainer = document.querySelector('.otps');
 
     socket.onmessage = (event) => {
@@ -80,7 +81,7 @@
     };
 
     socket.onclose = () => {
-        window.location.href = '/';
+        window.location.href = url_prefix;
     };
 
     function updateTimer() {

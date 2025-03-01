@@ -1,6 +1,7 @@
 # 2fa in web
 
 ![](https://storozhenko.dev/no_auth/example.gif)
+
 ## Purpose
 
 Since Authy discontinued their desktop application I was struggling to find a replacement.
@@ -31,13 +32,15 @@ So you *must* consider this project as insecure.
 OTP secrets are stored encrypted in yaml file.
 They are encrypted by [Fernet](https://cryptography.io/en/latest/fernet/)
 
-Whenever you input the right password on the frontend, OTP keys are decrypted and stored on the server side. 
+Whenever you input the right password on the frontend, OTP keys are decrypted and stored on the server side.
 You are getting a new page with a short living token that is used to establish WebSocket connection.
 The server sends you the OTP values (secrets are never exposed) every time they are updated.
 
-When the WebSocket connection is shut down (like you closed the tab, refreshed the page or you hit the 5 minute treshold) the decrypted secrets are erased from the memory of the server.
+When the WebSocket connection is shut down (like you closed the tab, refreshed the page or you hit the 5 minute
+treshold) the decrypted secrets are erased from the memory of the server.
 
-The short living token used to establish a WebSocket connection lives just 10 seconds and allows to create only a single connection. 
+The short living token used to establish a WebSocket connection lives just 10 seconds and allows to create only a single
+connection.
 
 The security is achived by not exposing any secrets to the client and server has it unencrypted only during the session.
 
@@ -46,7 +49,7 @@ The security is achived by not exposing any secrets to the client and server has
 1) clone the project
 2) Hash your password using Bcrypt algorithm
 3) Create `.env` file like `.env_example`
-3) Put the hash in the `PREDEFINED_HASH` variable in the `.env` file 
+3) Put the hash in the `PREDEFINED_HASH` variable in the `.env` file
 4) run `docker compose up -d`
 5) run `docker compose exec app python3 main.py --add-secret` to add a secret. Make sure that you use base32 secret, but
    it is pretty much standard, so I believe in you! Also, your password **must** match the one you used for
@@ -62,12 +65,17 @@ I recommend [Caddy](https://caddyserver.com/) since it has HTTPS support out of 
 
 **NEVER USE THIS TOOL WITHOUT HTTPS**
 
-### Limitations
+### Configuration and Limitations
 
-This solution supports only SHA1 6 digit OTPs.
+The tool supports most common algorithms but only 30 seconds based TOTPs.
 
-PRs to support more are welcome, I am too lazy. Especially because all 30 of my OTPs are using SHA1 6 digit scheme.
+The configuration available:
 
+| Env variable      | Description                                                                        | Optionality |
+|-------------------|------------------------------------------------------------------------------------|-------------|
+| `PREDEFINED_HASH` | Bcrypt hash which represents your password to access the codes                     | ❌           |
+| `URL_PREFIX`      | To host it somewhere like www.example.com/my_totp                                  | ✅           |
+| `HOST_IP`         | To listen a different IP in `docker-compose.yml`, if for example you use Wireguard | ✅           |
 
 ### Importing your keys
 

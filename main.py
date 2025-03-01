@@ -24,6 +24,7 @@ from fastapi.responses import HTMLResponse
 from fastapi_limiter import FastAPILimiter
 from fastapi_limiter.depends import RateLimiter
 from jinja2 import Environment, FileSystemLoader
+from pkg_resources import normalize_path
 from redis import asyncio as aioredis
 import uvicorn
 
@@ -32,7 +33,19 @@ import logging
 if not os.environ.get("PREDEFINED_HASH"):
     sys.exit("PREDEFINED_HASH environment variable must be set with a bcrypt hash")
 
+def normalize_url_prefix(prefix) -> str:
+    if not prefix or prefix == "/":
+        return "/"
+    if not prefix.startswith('/'):
+        prefix = '/' + prefix
+    if not prefix.endswith('/'):
+        prefix += '/'
+    return prefix
+
+
 predefined_bcrypt_hash = os.environ.get("PREDEFINED_HASH").encode("utf-8")
+url_prefix = normalize_url_prefix(os.environ.get("URL_PREFIX"))
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("OTP_APP")
 
@@ -101,12 +114,12 @@ def generate_totp(entry) -> str:
     ).now()
 
 
-@app.get("/", response_class=HTMLResponse)
+@app.get(url_prefix, response_class=HTMLResponse)
 async def index():
-    return HTMLResponse(content=index_template.render())
+    return HTMLResponse(content=index_template.render(url_prefix=url_prefix))
 
 
-@app.post("/check-password", dependencies=[Depends(RateLimiter(times=5, seconds=60))])
+@app.post(url_prefix + "check-password", dependencies=[Depends(RateLimiter(times=5, seconds=60))])
 async def check_password(password: str = Form(...)):
     start_time = time.monotonic()
 
@@ -129,10 +142,10 @@ async def check_password(password: str = Form(...)):
 
     logger.info(f"Time to decrypt {len(decrypted_secrets)} secrets: {time.monotonic() - start_time:.2f}s")
 
-    return HTMLResponse(content=otp_template.render(token=token))
+    return HTMLResponse(content=otp_template.render(token=token, url_prefix=url_prefix))
 
 
-@app.websocket("/ws")
+@app.websocket(url_prefix + "ws")
 async def websocket_endpoint(websocket: WebSocket, token: str):
     if token not in temp_session_store:
         await websocket.close(code=4401)
