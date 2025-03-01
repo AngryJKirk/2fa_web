@@ -2,6 +2,7 @@ import argparse
 import asyncio
 import base64
 import secrets
+import shutil
 import sys
 
 import bcrypt
@@ -249,14 +250,12 @@ def add_secret():
 
     if os.path.exists(secrets_path):
         if os.path.isdir(secrets_path):
-            os.rmdir(secrets_path)
-        elif os.path.isfile(secrets_path):
-            pass
-        else:
-            raise ValueError(f"Unexpected file type at {secrets_path}")
-    else:
-        with open(secrets_path, 'w') as f:
-            pass
+            shutil.rmtree(secrets_path)
+    elif os.path.isfile(secrets_path):
+        os.remove(secrets_path)
+
+    with open(secrets_path, 'w') as f:
+        f.write("")
 
     with open(secrets_path, 'r') as file:
         data = yaml.safe_load(file) or []
