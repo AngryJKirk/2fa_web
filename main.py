@@ -247,6 +247,17 @@ def add_secret():
 
     encrypted_secret = encrypt_message(secret, password).decode()
 
+    if os.path.exists(secrets_path):
+        if os.path.isdir(secrets_path):
+            os.rmdir(secrets_path)
+        elif os.path.isfile(secrets_path):
+            pass
+        else:
+            raise ValueError(f"Unexpected file type at {secrets_path}")
+    else:
+        with open(secrets_path, 'w') as f:
+            pass
+
     with open(secrets_path, 'r') as file:
         data = yaml.safe_load(file) or []
 
