@@ -33,6 +33,7 @@ import logging
 if not os.environ.get("PREDEFINED_HASH"):
     sys.exit("PREDEFINED_HASH environment variable must be set with a bcrypt hash")
 
+
 def normalize_url_prefix(prefix) -> str:
     if not prefix or prefix == "/":
         return "/"
@@ -196,12 +197,14 @@ def is_valid_base32(secret: str) -> bool:
     except Exception:
         return False
 
+
 def prompt_non_empty(prompt_text: str) -> str:
     while True:
         value = input(prompt_text).strip()
         if value:
             return value
         print("This field cannot be empty. Try again.")
+
 
 def prompt_password(prompt_text: str) -> str:
     while True:
@@ -210,6 +213,7 @@ def prompt_password(prompt_text: str) -> str:
             return password
         print("Password cannot be empty. Try again.")
 
+
 def prompt_valid_base32(prompt_text: str) -> str:
     while True:
         secret = pwinput.pwinput(prompt=prompt_text, mask='*').strip()
@@ -217,12 +221,14 @@ def prompt_valid_base32(prompt_text: str) -> str:
             return secret
         print("Invalid secret. It must be a non-empty valid Base32 string. Try again.")
 
+
 def prompt_for_digits() -> int:
     while True:
         digits = input("Number of digits [default: 6]: ").strip() or "6"
         if digits.isdigit() and 4 <= int(digits) <= 12:
             return int(digits)
         print("Invalid digits. Supported range: 4 to 12. Try again.")
+
 
 def prompt_for_algorithm() -> str:
     valid_algorithms = {"SHA1", "SHA256", "SHA512"}
@@ -232,8 +238,8 @@ def prompt_for_algorithm() -> str:
             return algorithm
         print(f"Invalid algorithm. Supported options: {', '.join(valid_algorithms)}. Try again.")
 
-def add_secret():
 
+def add_secret():
     while True:
         password = prompt_password('Enter your password: ')
         if verify_password_hash(password):
@@ -246,6 +252,10 @@ def add_secret():
     algorithm = prompt_for_algorithm()
 
     encrypted_secret = encrypt_message(secret, password).decode()
+
+    if not os.path.exists(secrets_path):
+        with open(secrets_path, 'w') as file:
+            yaml.safe_dump([], file)
 
     with open(secrets_path, 'r') as file:
         data = yaml.safe_load(file) or []
@@ -261,6 +271,7 @@ def add_secret():
         yaml.dump(data, file, sort_keys=False)
 
     print("New secret added to secrets.yml")
+
 
 def remove_secret():
     secret_name = prompt_non_empty("Enter the secret name: ")
