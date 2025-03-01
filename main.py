@@ -2,7 +2,6 @@ import argparse
 import asyncio
 import base64
 import secrets
-import shutil
 import sys
 
 import bcrypt
@@ -55,7 +54,7 @@ env = Environment(loader=FileSystemLoader("templates"))
 index_template = env.get_template("index.html")
 bad_password_template = env.get_template("bad_password.html")
 otp_template = env.get_template("otp.html.j2")
-secrets_path = 'secrets.yml'
+secrets_path = 'secrets/secrets.yml'
 temp_session_store = {}
 
 
@@ -247,15 +246,6 @@ def add_secret():
     algorithm = prompt_for_algorithm()
 
     encrypted_secret = encrypt_message(secret, password).decode()
-
-    if os.path.exists(secrets_path):
-        if os.path.isdir(secrets_path):
-            shutil.rmtree(secrets_path)
-    elif os.path.isfile(secrets_path):
-        os.remove(secrets_path)
-
-    with open(secrets_path, 'w') as f:
-        f.write("")
 
     with open(secrets_path, 'r') as file:
         data = yaml.safe_load(file) or []

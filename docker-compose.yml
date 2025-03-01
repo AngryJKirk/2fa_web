@@ -19,7 +19,7 @@ services:
     ports:
       - "${HOST_IP:-127.0.0.1}:11211:8000"
     volumes:
-      - ./secrets.yml:/app/secrets.yml
+      - ./secrets:/app/secrets
     depends_on:
       redis:
         condition: service_healthy
