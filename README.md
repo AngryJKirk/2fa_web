@@ -14,7 +14,9 @@ I decided to make my own.
 
 It's a simple password-protected page where you can see all your 2FA codes updating in real time.
 
-It does not have any controls on the frontend.
+Click to copy the code.
+
+Start typing to filter codes.
 
 ## Security
 
