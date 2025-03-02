@@ -1,10 +1,27 @@
 <div class="parent">
+    <div class="search-popup"></div>
     <div class="timer-container">
         <div id="timer-line"></div>
     </div>
     <div class="otps"></div>
 </div>
 <style>
+
+    .search-popup {
+        position: fixed;
+        top: 10px;
+        left: 10px;
+        background-color: #2e2e2e;
+        border-bottom: 1px solid #d6d6d6;
+        padding: 5px 10px;
+        z-index: 1000;
+        font-size: 18px;
+        max-width: 90vw;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
     .otp, .otps, .parent {
         display: flex
     }
@@ -60,7 +77,45 @@
 
 <script>
 
-    function spaceOutCode(code) {
+    let searchQuery = '';
+
+    const showSearchPopup = () => {
+        let popup = document.querySelector('.search-popup');
+        if (searchQuery === '') {
+            popup.style.display = 'none'
+        } else {
+            popup.style.display = ''
+        }
+        popup.textContent = searchQuery;
+    };
+
+    const filterOtps = () => {
+        const allOtps = document.querySelectorAll('.otp');
+        const query = searchQuery.toLowerCase();
+
+        allOtps.forEach(otp => {
+            const name = otp.querySelector('.otp_name').textContent.toLowerCase();
+            otp.style.display = name.includes(query) ? '' : 'none';
+        });
+    };
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+            searchQuery += e.key;
+            showSearchPopup();
+            filterOtps();
+        } else if (e.key === 'Backspace') {
+            searchQuery = searchQuery.slice(0, -1);
+            showSearchPopup();
+            filterOtps();
+        } else if (e.key === 'Escape') {
+            searchQuery = '';
+            showSearchPopup();
+            filterOtps();
+        }
+    });
+
+    const spaceOutCode = code => {
         const len = code.length;
 
         if (len % 2 === 0) {
@@ -70,12 +125,15 @@
             const middle = Math.floor(len / 2);
             return code.slice(0, middle) + ' ' + code[middle] + ' ' + code.slice(middle + 1);
         }
-    }
+    };
+
+    const updateTimer = () => {
+        const progress = (30 - (Date.now() / 1000) % 30) / 30 * 100;
+        document.getElementById('timer-line').style.width = progress + '%';
+    };
 
     const url_prefix = "{{ url_prefix }}"
-    const token = "{{ token }}";
-    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-    const socket = new WebSocket(`${proto}://${location.host}${url_prefix}ws?token=${encodeURIComponent(token)}`);
+    const socket = new WebSocket(`${(location.protocol === 'https:' ? 'wss' : 'ws')}://${location.host}${url_prefix}ws?token=${encodeURIComponent("{{ token }}")}`);
     const otpContainer = document.querySelector('.otps');
 
     socket.onmessage = (event) => {
@@ -100,19 +158,16 @@
                 });
             };
         });
+        filterOtps()
     };
 
     socket.onclose = () => {
         window.location.href = url_prefix;
     };
 
-    function updateTimer() {
-        const progress = (30 - (Date.now() / 1000) % 30) / 30 * 100;
-        document.getElementById('timer-line').style.width = progress + '%';
-    }
-
     setInterval(updateTimer, 10);
     updateTimer();
+    showSearchPopup();
 
 </script>
 
